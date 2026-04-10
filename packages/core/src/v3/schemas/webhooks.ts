@@ -3,53 +3,309 @@ import { RunStatus } from "./api.js";
 import { RuntimeEnvironmentTypeSchema, TaskRunError } from "./common.js";
 
 const ID_PATTERNS = {
-  RUN: /^run_[a-zA-Z0-9]+$/,
-  TASK: /^task_[a-zA-Z0-9]+$/,
-  ENV: /^env_[a-zA-Z0-9]+$/,
-  ORG: /^org_[a-zA-Z0-9]+$/,
-  PROJECT: /^proj_[a-zA-Z0-9]+$/,
+  run: /^run_[a-z0-9]+$/i,
+  task: /^task_[a-z0-9]+$/i,
+  environment: /^env_[a-z0-9]+$/i,
+  organization: /^org_[a-z0-9]+$/i,
+  project: /^proj_[a-z0-9]+$/i,
 };
 
-const idWithPrefix = (pattern: RegExp) => z.string().regex(pattern, "Invalid ID format");
-
-export const AlertWebhookRunFailedObject = z.object({
+/** Represents a failed run alert webhook payload */
+const AlertWebhookRunFailedObject = z.object({
+  /** Task information */
   task: z.object({
-    id: idWithPrefix(ID_PATTERNS.TASK),
-    filePath: z.string().min(1),
+    /** Unique identifier for the task */
+    id: z.string().regex(ID_PATTERNS.task, "Invalid task ID format"),
+    /** File path where the task is defined */
+    filePath: z.string(),
+    /** Name of the exported task function */
     exportName: z.string().optional(),
+    /** Version of the task */
     version: z.string(),
+    /** Version of the SDK used */
     sdkVersion: z.string(),
+    /** Version of the CLI used */
     cliVersion: z.string(),
   }),
+  /** Run information */
   run: z.object({
-    id: idWithPrefix(ID_PATTERNS.RUN),
+    /** Unique identifier for the run */
+    id: z.string().regex(ID_PATTERNS.run, "Invalid run ID format"),
+    /** Run number */
     number: z.number().int().positive(),
+    /** Current status of the run */
     status: RunStatus,
+    /** When the run was created */
     createdAt: z.coerce.date(),
+    /** When the run started executing */
     startedAt: z.coerce.date().optional(),
+    /** When the run finished executing */
     completedAt: z.coerce.date().optional(),
+    /** Whether this is a test run */
     isTest: z.boolean(),
+    /** Idempotency key for the run */
     idempotencyKey: z.string().optional(),
-    tags: z.array(z.string().max(50)).max(20),
+    /** Associated tags */
+    tags: z.array(z.string()),
+    /** Error information */
     error: TaskRunError,
+    /** Whether the run was an out-of-memory error */
     isOutOfMemoryError: z.boolean(),
+    /** Machine preset used for the run */
     machine: z.string(),
-    dashboardUrl: z.string().url(),
+    /** URL to view the run in the dashboard */
+    dashboardUrl: z.string().url("Invalid dashboard URL"),
+  }).refine((data) => {
+    if (data.startedAt && data.completedAt) {
+      return data.completedAt >= data.startedAt;
+    }
+    return true;
+  }, {
+    message: "completedAt must be after startedAt",
+    path: ["completedAt"],
   }),
+  /** Environment information */
   environment: z.object({
-    id: idWithPrefix(ID_PATTERNS.ENV),
+    /** Environment ID */
+    id: z.string().regex(ID_PATTERNS.environment, "Invalid environment ID format"),
+    /** Environment type */
+    type: RuntimeEnvironmentTypeSchema,
+    /** Environment slug */
+    slug: z.string(),
+    /** Environment branch name */
+    branchName: z.string().optional(),
+  }),
+  /** Organization information */
+  organization: z.object({
+    /** Organization ID */
+    id: z.string().regex(ID_PATTERNS.organization, "Invalid organization ID format"),
+    /** Organization slug */
+    slug: z.string(),
+    /** Organization name */
+    name: z.string(),
+  }),
+  /** Project information */
+  project: z.object({
+    /** Project ID */
+    id: z.string().regex(ID_PATTERNS.project, "Invalid project ID format"),
+    /** Project reference */
+    ref: z.string(),
+    /** Project slug */
+    slug: z.string(),
+    /** Project name */
+    name: z.string(),
+  }),
+});
+
+export type AlertWebhookRunFailedObject = z.infer<typeof AlertWebhookRunFailedObject>;
+
+/** Represents a deployment error */
+export const DeployError = z.object({
+  /** Error name */
+  name: z.string(),
+  /** Error message */
+  message: z.string(),
+  /** Error stack trace */
+  stack: z.string().optional(),
+  /** Standard error output */
+  stderr: z.string().optional(),
+});
+
+export type DeployError = z.infer<typeof DeployError>;
+
+const deploymentCommonProperties = {
+  /** Environment information */
+  environment: z.object({
+    id: z.string().regex(ID_PATTERNS.environment, "Invalid environment ID format"),
     type: RuntimeEnvironmentTypeSchema,
     slug: z.string(),
+    /** Environment branch name */
+    branchName: z.string().optional(),
   }),
+  /** Organization information */
   organization: z.object({
-    id: idWithPrefix(ID_PATTERNS.ORG),
+    id: z.string().regex(ID_PATTERNS.organization, "Invalid organization ID format"),
     slug: z.string(),
     name: z.string(),
   }),
+  /** Project information */
   project: z.object({
-    id: idWithPrefix(ID_PATTERNS.PROJECT),
+    id: z.string().regex(ID_PATTERNS.project, "Invalid project ID format"),
     ref: z.string(),
     slug: z.string(),
     name: z.string(),
   }),
+  /** Git metadata for the deployment source code */
+  git: z
+    .object({
+      branch: z.string(),
+      commitSha: z.string(),
+      commitMessage: z.string(),
+      commitUrl: z.string().url().optional(),
+      branchUrl: z.string().url().optional(),
+      pullRequestNumber: z.number().optional(),
+      pullRequestTitle: z.string().optional(),
+      pullRequestUrl: z.string().url().optional(),
+      provider: z.string().optional(),
+    })
+    .optional(),
+  /** Vercel integration data */
+  vercel: z
+    .object({
+      deploymentUrl: z.string().url(),
+    })
+    .optional(),
+};
+
+const deploymentDeploymentCommonProperties = {
+  /** Deployment ID */
+  id: z.string(),
+  /** Deployment status */
+  status: z.string(),
+  /** Deployment version */
+  version: z.string(),
+  /** Short code identifier */
+  shortCode: z.string(),
+};
+
+/** Represents a successful deployment alert webhook payload */
+export const AlertWebhookDeploymentSuccessObject = z.object({
+  ...deploymentCommonProperties,
+  deployment: z.object({
+    ...deploymentDeploymentCommonProperties,
+    /** When the deployment completed */
+    deployedAt: z.coerce.date(),
+  }),
+  /** Deployed tasks */
+  tasks: z.array(
+    z.object({
+      /** Task ID */
+      id: z.string().regex(ID_PATTERNS.task, "Invalid task ID format"),
+      /** File path where the task is defined */
+      filePath: z.string(),
+      /** Name of the exported task function */
+      exportName: z.string().optional(),
+      /** Source of the trigger */
+      triggerSource: z.string(),
+    })
+  ),
 });
+
+/** Represents a failed deployment alert webhook payload */
+export const AlertWebhookDeploymentFailedObject = z.object({
+  ...deploymentCommonProperties,
+  deployment: z.object({
+    ...deploymentDeploymentCommonProperties,
+    /** When the deployment failed */
+    failedAt: z.coerce.date(),
+  }),
+  /** Error information */
+  error: DeployError,
+});
+
+export type AlertWebhookDeploymentSuccessObject = z.infer<
+  typeof AlertWebhookDeploymentSuccessObject
+>;
+
+export type AlertWebhookDeploymentFailedObject = z.infer<typeof AlertWebhookDeploymentFailedObject>;
+
+/** Represents an error group alert webhook payload */
+export const AlertWebhookErrorGroupObject = z.object({
+  /** Classification of the error alert */
+  classification: z.enum(["new_issue", "regression", "unignored"]),
+  /** Error information */
+  error: z.object({
+    /** Error fingerprint identifier */
+    fingerprint: z.string(),
+    /** Error type */
+    type: z.string(),
+    /** Error message */
+    message: z.string(),
+    /** Sample stack trace */
+    stackTrace: z.string().optional(),
+    /** When the error was first seen */
+    firstSeen: z.coerce.date(),
+    /** When the error was last seen */
+    lastSeen: z.coerce.date(),
+    /** Number of occurrences */
+    occurrenceCount: z.number(),
+    /** Task identifier where the error occurred */
+    taskIdentifier: z.string(),
+  }),
+  /** Environment information */
+  environment: z.object({
+    /** Environment ID */
+    id: z.string().regex(ID_PATTERNS.environment, "Invalid environment ID format"),
+    /** Environment name */
+    name: z.string(),
+  }),
+  /** Organization information */
+  organization: z.object({
+    /** Organization ID */
+    id: z.string().regex(ID_PATTERNS.organization, "Invalid organization ID format"),
+    /** Organization slug */
+    slug: z.string(),
+    /** Organization name */
+    name: z.string(),
+  }),
+  /** Project information */
+  project: z.object({
+    /** Project ID */
+    id: z.string().regex(ID_PATTERNS.project, "Invalid project ID format"),
+    /** Project reference */
+    ref: z.string(),
+    /** Project slug */
+    slug: z.string(),
+    /** Project name */
+    name: z.string(),
+  }),
+  /** URL to view the error in the dashboard */
+  dashboardUrl: z.string().url("Invalid dashboard URL"),
+});
+
+export type AlertWebhookErrorGroupObject = z.infer<typeof AlertWebhookErrorGroupObject>;
+
+/** Common properties for all webhooks */
+const commonProperties = {
+  /** Webhook ID */
+  id: z.string(),
+  /** When the webhook was created */
+  created: z.coerce.date(),
+  /** Version of the webhook */
+  webhookVersion: z.string(),
+};
+
+/** Represents all possible webhook types */
+export const Webhook = z.discriminatedUnion("type", [
+  /** Run failed alert webhook */
+  z.object({
+    ...commonProperties,
+    type: z.literal("alert.run.failed"),
+    object: AlertWebhookRunFailedObject,
+  }),
+  /** Deployment success alert webhook */
+  z.object({
+    ...commonProperties,
+    type: z.literal("alert.deployment.success"),
+    object: AlertWebhookDeploymentSuccessObject,
+  }),
+  /** Deployment failed alert webhook */
+  z.object({
+    ...commonProperties,
+    type: z.literal("alert.deployment.failed"),
+    object: AlertWebhookDeploymentFailedObject,
+  }),
+  /** Error group alert webhook */
+  z.object({
+    ...commonProperties,
+    type: z.literal("alert.error"),
+    object: AlertWebhookErrorGroupObject,
+  }),
+]);
+
+export type Webhook = z.infer<typeof Webhook>;
+
+export type RunFailedWebhook = Extract<Webhook, { type: "alert.run.failed" }>;
+export type DeploymentSuccessWebhook = Extract<Webhook, { type: "alert.deployment.success" }>;
+export type DeploymentFailedWebhook = Extract<Webhook, { type: "alert.deployment.failed" }>;
+export type ErrorWebhook = Extract<Webhook, { type: "alert.error" }>;
