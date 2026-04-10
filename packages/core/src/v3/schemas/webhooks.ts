@@ -4,18 +4,18 @@ import { RuntimeEnvironmentTypeSchema, TaskRunError } from "./common.js";
 
 const ID_PATTERNS = {
   run: /^run_[a-z0-9]+$/i,
-  task: /^task_[a-z0-9]+$/i,
-  environment: /^env_[a-z0-9]+$/i,
-  organization: /^org_[a-z0-9]+$/i,
-  project: /^proj_[a-z0-9]+$/i,
+  // Task identifiers in webhooks are often user-defined slugs (e.g., "process-payment")
+  taskIdentifier: /^[a-z0-9\-_]+$/i,
+  // Internal IDs are typically Prisma CUIDs (starting with 'c')
+  cuid: /^[a-z0-9]+$/i,
 };
 
 /** Represents a failed run alert webhook payload */
 const AlertWebhookRunFailedObject = z.object({
   /** Task information */
   task: z.object({
-    /** Unique identifier for the task */
-    id: z.string().regex(ID_PATTERNS.task, "Invalid task ID format"),
+    /** Unique identifier for the task (often a user-defined slug) */
+    id: z.string().regex(ID_PATTERNS.taskIdentifier, "Invalid task ID format"),
     /** File path where the task is defined */
     filePath: z.string(),
     /** Name of the exported task function */
@@ -66,8 +66,8 @@ const AlertWebhookRunFailedObject = z.object({
   }),
   /** Environment information */
   environment: z.object({
-    /** Environment ID */
-    id: z.string().regex(ID_PATTERNS.environment, "Invalid environment ID format"),
+    /** Environment ID (typically a CUID) */
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid environment ID format"),
     /** Environment type */
     type: RuntimeEnvironmentTypeSchema,
     /** Environment slug */
@@ -77,8 +77,8 @@ const AlertWebhookRunFailedObject = z.object({
   }),
   /** Organization information */
   organization: z.object({
-    /** Organization ID */
-    id: z.string().regex(ID_PATTERNS.organization, "Invalid organization ID format"),
+    /** Organization ID (typically a CUID) */
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid organization ID format"),
     /** Organization slug */
     slug: z.string(),
     /** Organization name */
@@ -86,8 +86,8 @@ const AlertWebhookRunFailedObject = z.object({
   }),
   /** Project information */
   project: z.object({
-    /** Project ID */
-    id: z.string().regex(ID_PATTERNS.project, "Invalid project ID format"),
+    /** Project ID (typically a CUID) */
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid project ID format"),
     /** Project reference */
     ref: z.string(),
     /** Project slug */
@@ -116,7 +116,7 @@ export type DeployError = z.infer<typeof DeployError>;
 const deploymentCommonProperties = {
   /** Environment information */
   environment: z.object({
-    id: z.string().regex(ID_PATTERNS.environment, "Invalid environment ID format"),
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid environment ID format"),
     type: RuntimeEnvironmentTypeSchema,
     slug: z.string(),
     /** Environment branch name */
@@ -124,13 +124,13 @@ const deploymentCommonProperties = {
   }),
   /** Organization information */
   organization: z.object({
-    id: z.string().regex(ID_PATTERNS.organization, "Invalid organization ID format"),
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid organization ID format"),
     slug: z.string(),
     name: z.string(),
   }),
   /** Project information */
   project: z.object({
-    id: z.string().regex(ID_PATTERNS.project, "Invalid project ID format"),
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid project ID format"),
     ref: z.string(),
     slug: z.string(),
     name: z.string(),
@@ -180,7 +180,7 @@ export const AlertWebhookDeploymentSuccessObject = z.object({
   tasks: z.array(
     z.object({
       /** Task ID */
-      id: z.string().regex(ID_PATTERNS.task, "Invalid task ID format"),
+      id: z.string().regex(ID_PATTERNS.taskIdentifier, "Invalid task ID format"),
       /** File path where the task is defined */
       filePath: z.string(),
       /** Name of the exported task function */
@@ -235,14 +235,14 @@ export const AlertWebhookErrorGroupObject = z.object({
   /** Environment information */
   environment: z.object({
     /** Environment ID */
-    id: z.string().regex(ID_PATTERNS.environment, "Invalid environment ID format"),
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid environment ID format"),
     /** Environment name */
     name: z.string(),
   }),
   /** Organization information */
   organization: z.object({
     /** Organization ID */
-    id: z.string().regex(ID_PATTERNS.organization, "Invalid organization ID format"),
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid organization ID format"),
     /** Organization slug */
     slug: z.string(),
     /** Organization name */
@@ -251,7 +251,7 @@ export const AlertWebhookErrorGroupObject = z.object({
   /** Project information */
   project: z.object({
     /** Project ID */
-    id: z.string().regex(ID_PATTERNS.project, "Invalid project ID format"),
+    id: z.string().regex(ID_PATTERNS.cuid, "Invalid project ID format"),
     /** Project reference */
     ref: z.string(),
     /** Project slug */
